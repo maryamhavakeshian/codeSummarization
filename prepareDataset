@@ -1,0 +1,114 @@
+#!/bin/bash
+# the aim of the script is: 
+#1) cloning all repositories of an organization(it support pagination) 
+#and 2) moving the java files which use Junit framework in folders separeted by name of project
+target_dir="/var/modifiedRepos/"
+source_dir="/var/repos/"
+#source_dir="~/Documents/clonerepos/TestLoop"
+search_pattern='org.junit\|junit.framework'
+log_path="/var/prepareDatasetLog"
+log_file="${log_path}/logFile.txt"
+
+hasNextPage=true
+pageNumber=1
+organization_name=javaee
+
+
+function generateLog
+{
+
+    if [ ! -d $log_path ]
+    then
+       mkdir -p $log_path
+       chown -R root:maintenance $log_path
+       chmod 750 $log_path
+    fi
+    if [ -f $log_file ]
+    then
+        chown root:maintenance $log_file
+        chmod 640 $log_file
+        echo "" >> $log_file
+        echo "********************************************************************************" >> $log_file
+        echo "" >> $log_file
+    else
+        touch $log_file
+        chown root:maintenance $log_file
+        chmod 640 $log_file
+    fi
+}
+
+
+function cprintLine
+{
+    echo -e "$1" >> $log_file
+}
+
+
+
+
+#cloning all repositories of an organization
+function cloneRepository
+{
+    while $hasNextPage
+    do
+        repositories=$(curl "https://api.github.com/orgs/$organization_name/repos?per_page=100&page=$pageNumber"| jq .[].ssh_url)
+        if [[ $(echo $repositories | wc -w) -eq 0 ]]
+        then
+          hasNextPage=false
+        fi
+        echo $repositories | xargs -n 1 git clone
+        pageNumber=$(expr $pageNumber + 1)
+    done
+
+}
+#To write the second part, below links are used
+#https://stackoverflow.com/questions/4000613/perform-an-action-in-every-sub-directory-using-bash
+#https://stackoverflow.com/questions/16956810/how-do-i-find-all-files-containing-specific-text-on-linux
+function separateProject
+{
+
+    for D in *; do # iterates over each repository of a specific organization
+        if [ -d "${D}" ]; then
+            echo "${D}"   # your processing here
+ # creat a directory, whose name is similar to the name of repository(project)
+            mkdir -p $target_dir${D}
+#--include let grep works on .java files
+	   file_list=$(grep --include=\*.java -Ril $search_pattern ./${D})
+    	   echo $file_list | xargs -n1 cp --target-directory $target_dir${D}/
+
+       fi
+    done
+
+}
+
+echo "hi Pre"
+# Declare an array of string with type
+
+ 
+function prepareDataset
+{
+    RepositoryArray=( "google")
+    echo "hi P"
+    # Iterate the string array using for loop
+    for val in ${RepositoryArray[@]}; do
+       cprintLine "repository is $val"
+       echo $val
+       mkdir $source_dir$val
+       cd $source_dir$val
+       organization_name=$val
+       hasNextPage=true
+       pageNumber=1
+       cloneRepository
+       cprintLine "repository  $val is clonned"
+       separateProject
+       cprintLine "repository  $val is analyzed"
+    done
+}
+
+prepareDataset
+
+
+
+
+
+
